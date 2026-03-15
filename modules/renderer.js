@@ -26,6 +26,7 @@ export class Renderer {
     this.transContainer.innerHTML = '';
 
     let globalIndex = 0;
+    const seenNotes = new Set();
     for (const verse of doc.verses) {
       const saVerseEl  = this._verseEl(verse.id);
       const transVerseEl = this._verseEl(verse.id);
@@ -33,7 +34,7 @@ export class Renderer {
       for (const phrase of verse.phrases) {
         const g = globalIndex++;
         saVerseEl.appendChild(this._saPhraseEl(phrase, g));
-        transVerseEl.appendChild(this._phraseEl(phrase[lang], g));
+        transVerseEl.appendChild(this._phraseEl(phrase, lang, g, seenNotes));
       }
 
       this.saContainer.appendChild(saVerseEl);
@@ -48,10 +49,11 @@ export class Renderer {
     this.transContainer.innerHTML = '';
 
     let globalIndex = 0;
+    const seenNotes = new Set();
     for (const verse of this.doc.verses) {
       const transVerseEl = this._verseEl(verse.id);
       for (const phrase of verse.phrases) {
-        transVerseEl.appendChild(this._phraseEl(phrase[lang], globalIndex++));
+        transVerseEl.appendChild(this._phraseEl(phrase, lang, globalIndex++, seenNotes));
       }
       this.transContainer.appendChild(transVerseEl);
     }
@@ -113,11 +115,17 @@ export class Renderer {
     return div;
   }
 
-  /** Translation panel phrase — flat word spans, no sub-rows needed. */
-  _phraseEl(words, globalIndex) {
+  /** Translation panel phrase — flat word spans with optional footnote markers. */
+  _phraseEl(phrase, lang, globalIndex, seenNotes = new Set()) {
+    const words = phrase[lang] ?? [];
+    const notes = phrase.notes?.[lang] ?? [];
+
     const div = document.createElement('div');
     div.className = 'phrase';
     div.dataset.globalIndex = globalIndex;
+
+    const collected = []; // { num, text } for words that have notes
+    let noteNum = 0;
 
     words.forEach((word, wi) => {
       if (wi > 0) div.appendChild(document.createTextNode(' '));
@@ -125,8 +133,35 @@ export class Renderer {
       span.className = 'word';
       span.dataset.wordIndex = wi;
       span.textContent = word;
+
+      const note = notes[wi];
+      if (note && !seenNotes.has(note)) {
+        seenNotes.add(note);
+        noteNum++;
+        const sup = document.createElement('sup');
+        sup.className = 'fn-marker';
+        sup.textContent = noteNum;
+        span.appendChild(sup);
+        collected.push({ num: noteNum, text: note });
+      }
+
       div.appendChild(span);
     });
+
+    if (collected.length > 0) {
+      const fnDiv = document.createElement('div');
+      fnDiv.className = 'footnotes';
+      collected.forEach(({ num, text }) => {
+        const p = document.createElement('p');
+        p.className = 'footnote';
+        const sup = document.createElement('sup');
+        sup.textContent = num;
+        p.appendChild(sup);
+        p.appendChild(document.createTextNode(' ' + text));
+        fnDiv.appendChild(p);
+      });
+      div.appendChild(fnDiv);
+    }
 
     return div;
   }

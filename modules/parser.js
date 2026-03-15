@@ -12,8 +12,15 @@
  *
  * Returns: { meta: { title, composer, ... }, verses: [{ id, lines: [string] }] }
  */
+/**
+ * Parse a .bhajan plain-text file into a structured JS object.
+ *
+ * @param {string} text - Raw file contents.
+ * @returns {{ meta: Object.<string,string>, verses: Array<{id:string, lines:string[]}> }}
+ * @throws {Error} If the file contains no verses.
+ */
 export function parse(text) {
-  // Strip BOM if present
+  // Strip UTF-8 BOM (\uFEFF) written by some Windows text editors and Excel.
   const raw = text.startsWith('\uFEFF') ? text.slice(1) : text;
   const lines = raw.split(/\r?\n/);
 
@@ -56,7 +63,8 @@ export function parse(text) {
     if (currentVerse) {
       currentVerse.lines.push(trimmed);
     } else {
-      // Content before any verse marker — create implicit verse
+      // Content before any [verse:N] marker — create an implicit verse:1 so
+      // files that omit section markers still parse correctly.
       currentVerse = { id: 'verse:1', lines: [trimmed] };
       verses.push(currentVerse);
     }

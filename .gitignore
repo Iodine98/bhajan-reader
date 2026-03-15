@@ -8,6 +8,10 @@ translations/
 __pycache__/
 *.pyc
 *.pyo
+*.egg-info/
+dist/
+.venv/
+.python-version
 .pytest_cache/
 playwright-report/
 test-results/

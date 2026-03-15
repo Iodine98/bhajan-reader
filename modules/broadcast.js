@@ -35,6 +35,25 @@ export class BroadcastSync {
     }
   }
 
+  /** Emit theme change (operator → display). */
+  emitTheme(theme) {
+    if (!this.isDisplay) {
+      this.channel.postMessage({ type: 'theme', theme });
+    }
+  }
+
+  /** Emit full current state in response to a state-request (operator → display). */
+  emitState(state) {
+    if (!this.isDisplay) {
+      this.channel.postMessage({ type: 'state', ...state });
+    }
+  }
+
+  /** Ask the operator for its current full state (display → operator). */
+  requestState() {
+    this.channel.postMessage({ type: 'state-request' });
+  }
+
   /** Subscribe to all incoming messages. */
   onMessage(fn) {
     this._handler = fn;

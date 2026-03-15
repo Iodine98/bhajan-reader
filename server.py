@@ -11,6 +11,7 @@ Uses Server-Sent Events (SSE) — pure Python stdlib, no dependencies.
 """
 
 import http.server
+import io
 import os
 import threading
 import time
@@ -20,6 +21,16 @@ import json
 import urllib.request
 import urllib.error
 from pathlib import Path
+
+try:
+    # speech_recognition is an optional dependency — the server functions without
+    # it; Firefox users simply cannot use server-side transcription.  Install with:
+    #   uv add SpeechRecognition
+    import speech_recognition as _sr
+    _SR_AVAILABLE = True
+except ImportError:
+    _sr = None
+    _SR_AVAILABLE = False
 
 PORT = 8080
 ROOT = Path(__file__).parent.resolve()
@@ -111,16 +122,71 @@ class HotReloadHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/livereload' or self.path.startswith('/livereload?'):
             self._handle_sse()
+        elif self.path == '/api/transcribe-check':
+            self._handle_transcribe_check()
         else:
             self._handle_static()
 
     def do_POST(self):
         if self.path == '/api/anthropic':
             self._handle_anthropic_proxy()
+        elif self.path == '/api/transcribe':
+            self._handle_transcribe()
         elif self.path.startswith('/translations/'):
             self._handle_save_translation()
         else:
             self.send_error(404)
+
+    def _json_response(self, status: int, payload: dict):
+        body = json.dumps(payload).encode()
+        self.send_response(status)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _handle_transcribe_check(self):
+        """Return 200 if the speech_recognition library is available, 501 otherwise.
+
+        Called by the frontend before enabling server-side transcription so it
+        can fall back to native Web Speech API or show a helpful error message.
+        """
+        if _SR_AVAILABLE:
+            self._json_response(200, {'ok': True})
+        else:
+            self._json_response(501, {
+                'error': 'speech_recognition not installed. Run: pip install SpeechRecognition'
+            })
+
+    def _handle_transcribe(self):
+        """Accept a WAV audio blob, transcribe it via Google Speech, return the text.
+
+        Request body: raw WAV bytes (Content-Type: audio/wav).
+        Request header: X-Lang — BCP 47 language tag (default 'hi-IN').
+        Response: JSON { transcript: string } on success, or an error object.
+        """
+        if not _SR_AVAILABLE:
+            self._json_response(501, {
+                'error': 'speech_recognition not installed. Run: pip install SpeechRecognition'
+            })
+            return
+
+        length = int(self.headers.get('Content-Length', 0))
+        audio_bytes = self.rfile.read(length)
+        lang = self.headers.get('X-Lang', 'hi-IN')
+
+        recognizer = _sr.Recognizer()
+        try:
+            with _sr.AudioFile(io.BytesIO(audio_bytes)) as source:
+                audio = recognizer.record(source)
+            text = recognizer.recognize_google(audio, language=lang)
+            self._json_response(200, {'transcript': text})
+        except _sr.UnknownValueError:
+            self._json_response(200, {'transcript': ''})
+        except _sr.RequestError as e:
+            self._json_response(502, {'error': f'Google Speech API error: {e}'})
+        except Exception as e:
+            self._json_response(500, {'error': str(e)})
 
     def _handle_save_translation(self):
         """Save a translated document JSON to the translations/ folder."""
@@ -171,7 +237,7 @@ class HotReloadHandler(http.server.BaseHTTPRequestHandler):
         )
 
         try:
-            with urllib.request.urlopen(req) as resp:
+            with urllib.request.urlopen(req, timeout=30) as resp:
                 resp_body = resp.read()
                 self.send_response(resp.status)
                 self.send_header('Content-Type', resp.headers.get('Content-Type', 'application/json'))
@@ -187,6 +253,8 @@ class HotReloadHandler(http.server.BaseHTTPRequestHandler):
             self.send_header('Content-Length', str(len(resp_body)))
             self.end_headers()
             self.wfile.write(resp_body)
+        except urllib.error.URLError as e:
+            self._json_response(502, {'error': f'Could not reach Anthropic API: {e.reason}'})
 
     def _handle_sse(self):
         """Long-lived SSE connection. Blocks until client disconnects."""
@@ -203,12 +271,15 @@ class HotReloadHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.flush()
 
             while True:
-                fired = ev.wait(timeout=15)   # 15s heartbeat
+                # 15-second timeout prevents idle proxies and load balancers
+                # from silently closing the connection between file-change events.
+                fired = ev.wait(timeout=15)
                 if fired:
                     ev.clear()
                     self.wfile.write(b'data: reload\n\n')
                 else:
-                    # heartbeat comment keeps proxies from closing the connection
+                    # SSE comment lines (": ...") are ignored by browsers but
+                    # keep the TCP connection alive through intermediate proxies.
                     self.wfile.write(b': heartbeat\n\n')
                 self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):

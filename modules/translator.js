@@ -8,9 +8,9 @@
 
 const API_URL = '/api/anthropic';
 const MODEL = 'claude-haiku-4-5-20251001';
-const CACHE_VERSION = 2;  // bump to invalidate old cached translations without rom field
+const CACHE_VERSION = 6;  // bump to add IAST prefix + B2 language level to notes
 
-export async function translate(parsedDoc, apiKey, onProgress) {
+export async function translate(parsedDoc, apiKey, onProgress, t = k => k) {
   // Collect all lines in order
   const allLines = [];
   for (const verse of parsedDoc.verses) {
@@ -25,12 +25,12 @@ export async function translate(parsedDoc, apiKey, onProgress) {
 
   const sourceHash = hashString(allLines.join('\n'));
   const cacheKey   = `bhajan-trans-v${CACHE_VERSION}-${sourceHash}`;
-  const cacheFile  = `/translations/${sourceHash}.json`;
+  const cacheFile  = `/translations/${sourceHash}-v${CACHE_VERSION}.json`;
 
   // 1. Session cache (fastest)
   const cached = sessionStorage.getItem(cacheKey);
   if (cached) {
-    onProgress?.('Loaded from cache.');
+    onProgress?.(t('loadingCache'));
     return JSON.parse(cached);
   }
 
@@ -40,17 +40,17 @@ export async function translate(parsedDoc, apiKey, onProgress) {
     if (res.ok) {
       const doc = await res.json();
       sessionStorage.setItem(cacheKey, JSON.stringify(doc));
-      onProgress?.('Loaded from saved translation.');
+      onProgress?.(t('loadingSaved'));
       return doc;
     }
   } catch { /* network error — fall through to API */ }
 
   if (!apiKey) {
-    onProgress?.('No API key — showing transliteration only.');
+    onProgress?.(t('loadingNoKey'));
     return buildFallbackDocument(parsedDoc, sourceHash);
   }
 
-  onProgress?.('Translating with Claude…');
+  onProgress?.(t('loadingTranslating'));
 
   const prompt = buildPrompt(allLines);
   let responseText;
@@ -102,9 +102,13 @@ export async function translate(parsedDoc, apiKey, onProgress) {
     const sa = normaliseWords(p.sa ?? allLines[i]?.split(/\s+/) ?? []);
     return {
       sa,
-      rom: normaliseWords(p.rom ?? sa),
-      en:  normaliseWords(p.en ?? [allLines[i]]),
-      nl:  normaliseWords(p.nl ?? [allLines[i]]),
+      rom:   normaliseWords(p.rom ?? sa),
+      en:    normaliseWords(p.en ?? [allLines[i]]),
+      nl:    normaliseWords(p.nl ?? [allLines[i]]),
+      notes: {
+        en: normaliseNotes(p.notes?.en ?? [], sa.length),
+        nl: normaliseNotes(p.notes?.nl ?? [], sa.length),
+      },
     };
   });
 
@@ -118,7 +122,7 @@ export async function translate(parsedDoc, apiKey, onProgress) {
     body: JSON.stringify(doc),
   }).catch(() => { /* non-critical — ignore save errors */ });
 
-  onProgress?.('Translation complete.');
+  onProgress?.(t('loadingDone'));
   return doc;
 }
 
@@ -132,14 +136,15 @@ Translate each numbered line into English and Dutch, and provide IAST transliter
 Return ONLY a JSON array — no other text, no markdown fences.
 Each element corresponds to one input line (same order).
 Each element must have this exact structure:
-{ "sa": ["word1", ...], "rom": ["iast1", ...], "en": ["word1", ...], "nl": ["word1", ...] }
+{ "sa": ["word1", ...], "rom": ["iast1", ...], "en": ["word1", ...], "nl": ["word1", ...], "notes": { "en": [null, ...], "nl": [null, ...] } }
 
 Rules:
 - Split Sanskrit on spaces (keep conjunct consonant clusters together).
 - "rom": IAST transliteration of each Sanskrit word, in the same order and count as "sa".
 - Split translations into natural short word groups (aim for 2–5 tokens per group).
-- Keep "sa", "rom", "en", and "nl" the same length where linguistically sensible so words align visually.
+- Keep "sa", "rom", "en", "nl", and the notes arrays the same length where linguistically sensible so words align visually.
 - For untranslatable sacred syllables (ॐ, नमः) keep them as-is in "sa", give IAST in "rom", translate meaningfully in en/nl.
+- "notes": object with "en" and "nl" arrays, each the same length as "sa". Add a note only when the translated word(s) fail to convey the full spiritual or philosophical meaning of the Sanskrit — for example, a word with no equivalent concept in the target language, or where the translation is a pale shadow of the original. Do NOT add notes for grammatical points, word etymology, lexicology, or general Sanskrit context. Use null for all other words. Each note must begin with the IAST transliteration of the Sanskrit word followed by a colon (e.g. "oṃ: sacred primordial sound…"). Write at CEFR B2 level or simpler — clear, everyday language, no technical jargon.
 
 Lines:
 ${numbered}`;
@@ -159,7 +164,7 @@ function buildFallbackDocument(parsedDoc, sourceHash) {
     id: verse.id,
     phrases: verse.lines.map(line => {
       const words = line.split(/\s+/).filter(Boolean);
-      return { sa: words, rom: words, en: words, nl: words };
+      return { sa: words, rom: words, en: words, nl: words, notes: { en: Array(words.length).fill(null), nl: Array(words.length).fill(null) } };
     }),
   }));
   return { _format: 'bhajan-translated-v1', meta: { ...parsedDoc.meta, source_hash: sourceHash }, verses };
@@ -168,6 +173,15 @@ function buildFallbackDocument(parsedDoc, sourceHash) {
 function normaliseWords(arr) {
   if (!Array.isArray(arr)) return [String(arr)];
   return arr.map(w => String(w).trim()).filter(Boolean);
+}
+
+function normaliseNotes(arr, length) {
+  const result = [];
+  for (let i = 0; i < length; i++) {
+    const n = Array.isArray(arr) ? arr[i] : undefined;
+    result.push((n && typeof n === 'string' && n.trim()) ? n.trim() : null);
+  }
+  return result;
 }
 
 function hashString(str) {

@@ -2,20 +2,30 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Dependencies
+
+Python dependencies are managed with [uv](https://docs.astral.sh/uv/). After cloning:
+
+```bash
+uv sync          # installs all dependencies into .venv
+```
+
+Current dependencies: `SpeechRecognition` (server-side transcription fallback for Firefox).
+
 ## Running the app
 
 ```bash
-python3 server.py          # starts http://localhost:8080 with hot-reload
+uv run python3 server.py   # starts http://localhost:8080 with hot-reload
 ```
 
-No build step, no npm, no dependencies. The server is pure Python stdlib. Edit any `.js`, `.html`, `.css`, or `.bhajan` file and the browser reloads automatically via SSE.
+No build step, no npm. The frontend is vanilla JS. Edit any `.js`, `.html`, `.css`, or `.bhajan` file and the browser reloads automatically via SSE.
 
 ## Running tests
 
 Playwright (E2E, requires server running):
 
 ```bash
-pip install playwright pytest && playwright install chromium
+uv run pip install playwright pytest && playwright install chromium
 pytest tests/test_theme.py -v          # all theme tests
 pytest tests/test_theme.py::TestThemeToggle::test_click_switches_to_light  # single test
 ```
@@ -41,7 +51,7 @@ pytest tests/test_theme.py::TestThemeToggle::test_click_switches_to_light  # sin
 | `translator.js` | Calls Claude via the server proxy. Bump `CACHE_VERSION` constant when changing the prompt or expected JSON schema to invalidate old cached translations. |
 | `audio.js` | RMS onset detection. Configurable `threshold` (ratio over background) and `refractoryMs` (min gap between onsets). |
 | `broadcast.js` | Only the operator window emits; `?mode=display` windows are read-only listeners. |
-| `server.py` | Serves static files + proxies `POST /api/anthropic` → Anthropic API (CORS workaround) + handles `POST /translations/{hash}.json` to persist translated docs. |
+| `server.py` | Serves static files + proxies `POST /api/anthropic` → Anthropic API + handles `POST /translations/{hash}.json` + `POST /api/transcribe` for server-side speech recognition (Firefox fallback, requires `SpeechRecognition`). |
 
 ### Translation caching (three tiers)
 
