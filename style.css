@@ -110,6 +110,7 @@ button {
 button:hover { background: var(--btn-hover); border-color: #4a4a70; }
 button:active { background: var(--btn-active); }
 button svg { width: 16px; height: 16px; flex-shrink: 0; }
+#theme-icon-moon[hidden], #theme-icon-sun[hidden] { display: none; }
 
 #upload-btn { padding: 6px 14px; }
 

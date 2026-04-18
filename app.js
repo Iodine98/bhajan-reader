@@ -260,8 +260,8 @@ function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   if (!broadcast.isDisplay) {
     const isLight = theme === 'light';
-    themeIconMoon.hidden = isLight;
-    themeIconSun.hidden = !isLight;
+    themeIconMoon.toggleAttribute('hidden', isLight);
+    themeIconSun.toggleAttribute('hidden', !isLight);
     themeBtn.title = isLight ? t('themeToDark') : t('themeToLight');
     broadcast.emitTheme(theme);
   }
