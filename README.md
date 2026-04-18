@@ -1,5 +1,7 @@
 # Bhajan Reader
 
+![Tests](https://github.com/Iodine98/bhajan-reader/actions/workflows/test.yml/badge.svg)
+
 A browser-based Sanskrit chanting practice tool with word-by-word translation and real-time highlighting. Upload a `.bhajan` file and follow along phrase by phrase — the current word lights up across the Sanskrit and translation panels simultaneously.
 
 ## Features
