@@ -33,7 +33,7 @@ except ImportError:
     _SR_AVAILABLE = False
 
 PORT = 8080
-ROOT = Path(__file__).parent.resolve()
+ROOT = Path(__file__).parent.parent / 'frontend'
 
 RELOAD_SCRIPT = b"""
 <script>

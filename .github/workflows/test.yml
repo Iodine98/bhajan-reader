@@ -2,13 +2,11 @@ name: Tests
 
 on:
   push:
-    paths-ignore:
-      - '**.md'
-      - '.gitignore'
+    paths:
+      - 'backend/**'
   pull_request:
-    paths-ignore:
-      - '**.md'
-      - '.gitignore'
+    paths:
+      - 'backend/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -21,6 +19,10 @@ jobs:
       contents: read
       checks: write
       pull-requests: write
+
+    defaults:
+      run:
+        working-directory: backend
 
     steps:
       - uses: actions/checkout@v4
@@ -38,7 +40,7 @@ jobs:
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ hashFiles('uv.lock') }}
+          key: playwright-chromium-${{ hashFiles('backend/uv.lock') }}
 
       - name: Install Playwright browser
         if: steps.playwright-cache.outputs.cache-hit != 'true'
@@ -71,6 +73,6 @@ jobs:
         if: always()
         with:
           name: Pytest Results
-          path: reports/junit.xml
+          path: backend/reports/junit.xml
           reporter: java-junit
           fail-on-error: false
