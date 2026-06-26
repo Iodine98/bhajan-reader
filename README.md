@@ -14,11 +14,22 @@ A browser-based Sanskrit chanting practice tool with word-by-word translation an
 - Light and dark theme, English and Dutch UI
 - Hot-reload dev server, no build step, no npm
 
+## Repository structure
+
+```
+bhajan-reader/
+├── frontend/     # HTML, CSS, vanilla JS (index.html, app.js, modules/, examples/)
+└── backend/      # Python dev server + tests (server.py, pyproject.toml, tests/)
+```
+
+The frontend is deployed as static files to Hetzner on every push to `main` that touches `frontend/`. Tests run on every push or PR that touches `backend/`.
+
 ## Getting started
 
 **Requirements**: Python 3.12+ and [uv](https://docs.astral.sh/uv/)
 
 ```bash
+cd backend
 uv sync                      # install dependencies
 uv run python3 server.py     # start server at http://localhost:8080
 ```
@@ -75,20 +86,21 @@ Plain UTF-8 text with a metadata header and verse sections:
 - Each line under a marker is one **phrase** — the atomic unit for navigation and highlighting
 - Blank lines are ignored
 
-See `examples/` for complete sample files.
+See `frontend/examples/` for complete sample files.
 
 ## Running tests
 
-Requires the server to be running (`uv run python3 server.py`).
+Requires the server to be running. From the `backend/` directory:
 
 ```bash
+cd backend
 uv run pip install playwright pytest
 playwright install chromium
-pytest tests/ -v
+uv run pytest tests/ -v
 ```
 
 ## Architecture
 
-No framework, no bundler. The frontend is vanilla ES6 modules in `modules/` served directly by `server.py`. `app.js` is the entry point. The Python server also proxies the Anthropic API (to avoid CORS), saves translation JSON to `translations/` on disk, and watches files for hot-reload via SSE.
+No framework, no bundler. The frontend is vanilla ES6 modules in `frontend/modules/` served directly by `backend/server.py`. `frontend/app.js` is the entry point. The Python server also proxies the Anthropic API (to avoid CORS), saves translation JSON to `translations/` on disk, and watches `frontend/` files for hot-reload via SSE.
 
 For a detailed architecture reference including the data flow, module descriptions, and caching layers, see [CLAUDE.md](CLAUDE.md).
