@@ -74,39 +74,50 @@ jobs:
           echo "Backend body:    $BACKEND_BODY"
 
           python3 << 'PYEOF'
-          import os, xml.etree.ElementTree as ET
+          import os, sys, xml.etree.ElementTree as ET
 
           frontend_status = os.environ.get('FRONTEND_STATUS', '')
           backend_status  = os.environ.get('BACKEND_STATUS', '')
+          backend_body    = os.environ.get('BACKEND_BODY', '')
 
           cases = [
               (
                   "Frontend serves HTML",
                   frontend_status == '200',
-                  f"Expected HTTP 200, got {frontend_status}",
+                  f"Expected HTTP 200, got {frontend_status!r}",
               ),
               (
                   "Backend proxy reachable via Nginx",
                   backend_status in ('200', '501'),
-                  f"Expected HTTP 200 or 501, got {backend_status}",
+                  f"Expected HTTP 200 or 501, got {backend_status!r} — body: {backend_body!r}",
               ),
           ]
 
-          failures = sum(1 for _, ok, _ in cases if not ok)
+          failures = 0
           suite = ET.Element(
               'testsuite',
               name='Docker Smoke Tests',
               tests=str(len(cases)),
-              failures=str(failures),
           )
           for name, ok, msg in cases:
               tc = ET.SubElement(suite, 'testcase', classname='docker.smoke', name=name)
-              if not ok:
+              if ok:
+                  print(f"  PASS  {name}")
+              else:
+                  failures += 1
                   ET.SubElement(tc, 'failure', message=msg).text = msg
+                  print(f"  FAIL  {name}")
+                  print(f"        {msg}")
 
+          suite.set('failures', str(failures))
           os.makedirs('reports', exist_ok=True)
           ET.ElementTree(suite).write('reports/smoke-junit.xml', xml_declaration=True, encoding='utf-8')
-          print(f"Wrote reports/smoke-junit.xml ({failures} failure(s))")
+
+          if failures:
+              print(f"\n{failures} smoke test(s) failed — see above for details")
+              sys.exit(1)
+          else:
+              print(f"\nAll {len(cases)} smoke tests passed")
           PYEOF
 
       - name: Stop containers
