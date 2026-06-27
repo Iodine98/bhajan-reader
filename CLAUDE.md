@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Python dependencies are managed with [uv](https://docs.astral.sh/uv/). After cloning:
 
 ```bash
-uv sync          # installs all dependencies into .venv
+cd backend && uv sync          # installs all dependencies into .venv
 ```
 
 Current dependencies: `SpeechRecognition` (server-side transcription fallback for Firefox).
@@ -15,7 +15,7 @@ Current dependencies: `SpeechRecognition` (server-side transcription fallback fo
 ## Running the app
 
 ```bash
-uv run python3 server.py   # starts http://localhost:8080 with hot-reload
+cd backend && uv run python3 server.py   # starts http://localhost:8080 with hot-reload
 ```
 
 No build step, no npm. The frontend is vanilla JS. Edit any `.js`, `.html`, `.css`, or `.bhajan` file and the browser reloads automatically via SSE.
@@ -25,9 +25,10 @@ No build step, no npm. The frontend is vanilla JS. Edit any `.js`, `.html`, `.cs
 Playwright (E2E, requires server running):
 
 ```bash
+cd backend
 uv run pip install playwright pytest && playwright install chromium
-pytest tests/test_theme.py -v          # all theme tests
-pytest tests/test_theme.py::TestThemeToggle::test_click_switches_to_light  # single test
+uv run pytest tests/test_theme.py -v          # all theme tests
+uv run pytest tests/test_theme.py::TestThemeToggle::test_click_switches_to_light  # single test
 ```
 
 ## Architecture
