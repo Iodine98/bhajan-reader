@@ -31,3 +31,6 @@ desktop.ini
 
 # Conversation exports
 *.txt
+
+# Generated at deploy time from BACKEND_URL secret — never commit
+frontend/config.js

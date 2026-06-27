@@ -554,7 +554,7 @@ async function verifyApiKey(key) {
   verifyKeyBtn.disabled = true;
 
   try {
-    const response = await fetch('/api/anthropic', {
+    const response = await fetch(`${window.BACKEND_URL || ''}/api/anthropic`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

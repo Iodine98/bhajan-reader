@@ -6,7 +6,8 @@
  * Output: translated doc { meta, verses: [{ id, phrases: [{ sa, en, nl }] }] }
  */
 
-const API_URL = '/api/anthropic';
+const BASE = window.BACKEND_URL || '';
+const API_URL = `${BASE}/api/anthropic`;
 const MODEL = 'claude-haiku-4-5-20251001';
 const CACHE_VERSION = 6;  // bump to add IAST prefix + B2 language level to notes
 
@@ -25,7 +26,7 @@ export async function translate(parsedDoc, apiKey, onProgress, t = k => k) {
 
   const sourceHash = hashString(allLines.join('\n'));
   const cacheKey   = `bhajan-trans-v${CACHE_VERSION}-${sourceHash}`;
-  const cacheFile  = `/translations/${sourceHash}-v${CACHE_VERSION}.json`;
+  const cacheFile  = `${BASE}/translations/${sourceHash}-v${CACHE_VERSION}.json`;
 
   // 1. Session cache (fastest)
   const cached = sessionStorage.getItem(cacheKey);
