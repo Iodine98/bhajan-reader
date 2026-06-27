@@ -1,0 +1,144 @@
+name: Docker Integration Tests
+
+on:
+  push:
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'docker-compose.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'docker-compose.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build images
+        run: docker compose build
+
+      - name: Save images
+        run: docker save $(docker compose config --images | tr '\n' ' ') | gzip > images.tar.gz
+
+      - name: Upload images artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-images
+          path: images.tar.gz
+          retention-days: 1
+
+  smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download images artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-images
+
+      - name: Load images
+        run: docker load < images.tar.gz
+
+      - name: Start containers
+        run: docker compose up -d
+
+      - name: Wait for frontend
+        run: |
+          for i in {1..30}; do
+            if curl -s http://localhost:80 > /dev/null; then
+              echo "Frontend ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Frontend failed to start within 30 seconds"
+          exit 1
+
+      - name: Run smoke tests
+        run: |
+          export FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:80)
+          export BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:80/api/transcribe-check)
+          export BACKEND_BODY=$(curl -s http://localhost:80/api/transcribe-check)
+          echo "Frontend status: $FRONTEND_STATUS"
+          echo "Backend status:  $BACKEND_STATUS"
+          echo "Backend body:    $BACKEND_BODY"
+
+          python3 << 'PYEOF'
+          import os, xml.etree.ElementTree as ET
+
+          frontend_status = os.environ.get('FRONTEND_STATUS', '')
+          backend_status  = os.environ.get('BACKEND_STATUS', '')
+
+          cases = [
+              (
+                  "Frontend serves HTML",
+                  frontend_status == '200',
+                  f"Expected HTTP 200, got {frontend_status}",
+              ),
+              (
+                  "Backend proxy reachable via Nginx",
+                  backend_status in ('200', '501'),
+                  f"Expected HTTP 200 or 501, got {backend_status}",
+              ),
+          ]
+
+          failures = sum(1 for _, ok, _ in cases if not ok)
+          suite = ET.Element(
+              'testsuite',
+              name='Docker Smoke Tests',
+              tests=str(len(cases)),
+              failures=str(failures),
+          )
+          for name, ok, msg in cases:
+              tc = ET.SubElement(suite, 'testcase', classname='docker.smoke', name=name)
+              if not ok:
+                  ET.SubElement(tc, 'failure', message=msg).text = msg
+
+          os.makedirs('reports', exist_ok=True)
+          ET.ElementTree(suite).write('reports/smoke-junit.xml', xml_declaration=True, encoding='utf-8')
+          print(f"Wrote reports/smoke-junit.xml ({failures} failure(s))")
+          PYEOF
+
+      - name: Stop containers
+        if: always()
+        run: docker compose down
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-results
+          path: reports/smoke-junit.xml
+          retention-days: 7
+
+  report:
+    needs: [smoke]
+    runs-on: ubuntu-latest
+    if: always()
+    permissions:
+      checks: write
+      pull-requests: write
+    steps:
+      - name: Download test results
+        uses: actions/download-artifact@v4
+        with:
+          name: smoke-results
+          path: reports
+
+      - name: Publish test report
+        uses: dorny/test-reporter@v1
+        with:
+          name: Docker Smoke Tests
+          path: reports/smoke-junit.xml
+          reporter: java-junit
+          fail-on-error: false
