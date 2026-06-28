@@ -116,7 +116,7 @@ class HotReloadHandler(http.server.BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         # Suppress /livereload polling noise, show everything else
-        if '/livereload' not in (args[0] if args else ''):
+        if '/livereload' not in str(args[0] if args else ''):
             print(f"  {self.address_string()} — {fmt % args}")
 
     def do_GET(self):
