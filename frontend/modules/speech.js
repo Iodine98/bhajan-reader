@@ -192,6 +192,9 @@ export class ServerSpeechRecognizer {
    */
   async start() {
     if (this.isRunning) return;
+    if (!navigator.mediaDevices) {
+      throw new Error('Microphone requires HTTPS (or localhost). Serve the app over HTTPS to enable mic input.');
+    }
 
     // Verify server has speech_recognition before asking for mic permission
     const r = await fetch(`${BASE}/api/transcribe-check`);

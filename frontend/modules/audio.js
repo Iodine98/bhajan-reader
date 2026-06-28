@@ -34,6 +34,9 @@ export class AudioOnsetDetector {
 
   /** Request mic access and start the analysis loop. Throws on permission denial. */
   async start() {
+    if (!navigator.mediaDevices) {
+      throw new Error('Microphone requires HTTPS (or localhost). Serve the app over HTTPS to enable mic input.');
+    }
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
       video: false,
