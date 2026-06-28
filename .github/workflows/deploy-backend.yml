@@ -29,4 +29,4 @@ jobs:
         with:
           context: backend/
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/bhajan-reader-backend:latest
+          tags: ghcr.io/${{ github.repository_owner | lower }}/bhajan-reader-backend:latest
