@@ -31,6 +31,25 @@ The frontend Nginx container (`frontend/Dockerfile`) proxies `/api/*` and `/tran
 to the backend container (`backend/Dockerfile`). See `frontend/nginx.conf` for proxy rules.
 `docker-compose.yml` exposes only port 80 (frontend); the backend is internal.
 
+The backend image is published to GHCR (`ghcr.io/iodine98/bhajan-reader-backend:latest`)
+on every push to `main` that touches `frontend/**` via the `publish` job in
+`.github/workflows/deploy-frontend.yml`.
+
+## Backend URL (Tailscale / remote)
+
+When the frontend is deployed to Hetzner (static hosting) and the backend runs
+remotely via Tailscale Funnel, API calls need an explicit base URL. This is
+injected at deploy time by generating `frontend/config.js` from the
+`TAILSCALE_BACKEND_URL` GitHub secret:
+
+```js
+Object.defineProperty(window, 'BACKEND_URL', { value: 'https://...', ... });
+```
+
+For local dev against a remote backend, copy `frontend/config.example.js` →
+`frontend/config.js` and fill in the URL. Without `config.js`, all API calls use
+relative paths (works with `docker compose` or `server.py` directly).
+
 ## Running tests
 
 Playwright (E2E, requires server running):
