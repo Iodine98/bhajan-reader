@@ -178,10 +178,48 @@ jobs:
           name: smoke-results
           path: reports
 
-      - name: Publish test report
-        uses: EnricoMi/publish-unit-test-result-action@v2
+      - name: Generate report
+        run: |
+          python3 << 'PYEOF'
+          import os, xml.etree.ElementTree as ET
+
+          tree = ET.parse('reports/smoke-junit.xml')
+          suite = tree.getroot()
+          cases = suite.findall('testcase')
+          n_fail = sum(1 for tc in cases if tc.find('failure') is not None)
+          n_pass = len(cases) - n_fail
+          icon = '✅' if n_fail == 0 else '❌'
+
+          body = f'## {icon} Docker Integration Tests\n\n'
+          if n_fail == 0:
+              body += f'All **{len(cases)}** checks passed.\n\n'
+          else:
+              body += f'**{n_fail}** of **{len(cases)}** checks failed.\n\n'
+
+          body += '| # | Check | Status | Duration |\n'
+          body += '|---|-------|:------:|----------|\n'
+          for i, tc in enumerate(cases, 1):
+              name = tc.get('name', '')
+              t = tc.get('time', '')
+              failed = tc.find('failure') is not None
+              status = '❌' if failed else '✅'
+              dur = f'{float(t):.3f}s' if t else '—'
+              body += f'| {i} | {name} | {status} | {dur} |\n'
+
+          run_url = (
+              f"{os.environ['GITHUB_SERVER_URL']}/"
+              f"{os.environ['GITHUB_REPOSITORY']}/"
+              f"actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          )
+          body += f'\n<sub>Full run: {run_url}</sub>'
+
+          with open('pr-report.md', 'w') as f:
+              f.write(body)
+          print(body)
+          PYEOF
+
+      - name: Post report as PR comment
+        uses: marocchino/sticky-pull-request-comment@v2
         with:
-          files: reports/smoke-junit.xml
-          comment_mode: always
-          check_name: Docker Integration Tests
-          fail_on: nothing
+          header: docker-integration-report
+          path: pr-report.md
