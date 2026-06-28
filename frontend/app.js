@@ -206,9 +206,18 @@ function setupFileUpload() {
     const path = examplesSelect.value;
     if (!path) return;
     examplesSelect.value = '';
+    let r;
+    try {
+      r = await fetch(path);
+    } catch (err) {
+      alert('Could not load example: ' + err.message);
+      return;
+    }
+    if (!r.ok) {
+      alert('Could not load example: ' + r.statusText);
+      return;
+    }
     settingsModal.close();
-    const r = await fetch(path);
-    if (!r.ok) { setStatus('Could not load example: ' + r.statusText); return; }
     await handleText(await r.text());
   });
 }
@@ -340,16 +349,20 @@ function setupSettings() {
 
   verifyKeyBtn.addEventListener('click', () => verifyApiKey(apiKeyInput.value.trim()));
 
-  settingsClose.addEventListener('click', () => {
-    localStorage.setItem('claude-api-key', apiKeyInput.value.trim());
+  const tryCloseSettings = () => {
+    const key = apiKeyInput.value.trim();
+    if (!key && !currentDoc) {
+      alert('A Claude API key is required to translate bhajas. Enter your key before closing settings.');
+      return;
+    }
+    localStorage.setItem('claude-api-key', key);
     settingsModal.close();
-  });
+  };
+
+  settingsClose.addEventListener('click', tryCloseSettings);
 
   settingsModal.addEventListener('click', e => {
-    if (e.target === settingsModal) {
-      localStorage.setItem('claude-api-key', apiKeyInput.value.trim());
-      settingsModal.close();
-    }
+    if (e.target === settingsModal) tryCloseSettings();
   });
 
   thresholdInput.addEventListener('input', () => {
@@ -467,7 +480,7 @@ async function toggleMic() {
         micStatus.textContent = t('listening');
       } catch (err) {
         activeRecognizer = null;
-        setStatus('Speech error: ' + err.message);
+        alert('Speech error: ' + err.message);
       }
     } else {
       try {
@@ -482,7 +495,7 @@ async function toggleMic() {
         micBtn.title = t('micOnsetOffTitle');
         micStatus.textContent = t('micOn');
       } catch (err) {
-        setStatus('Mic error: ' + err.message + '. Use keyboard instead.');
+        alert('Mic error: ' + err.message + ' Use keyboard instead.');
       }
     }
   }
