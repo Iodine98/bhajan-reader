@@ -194,10 +194,20 @@ function exportTranslation() {
 // ── File upload ───────────────────────────────────────────────────────────────
 
 function setupFileUpload() {
-  uploadBtn.addEventListener('click', () => fileInput.click());
+  uploadBtn.addEventListener('click', () => {
+    const apiKey = localStorage.getItem('claude-api-key') ?? '';
+    if (!apiKey) {
+      alert('Enter your Claude API key in settings before loading a bhajan.');
+      return;
+    }
+    fileInput.click();
+  });
   fileInput.addEventListener('change', e => {
     const file = e.target.files[0];
-    if (file) handleFile(file);
+    if (file) {
+      settingsModal.close();
+      handleFile(file);
+    }
     fileInput.value = '';
   });
   exportBtn.addEventListener('click', exportTranslation);
@@ -205,6 +215,12 @@ function setupFileUpload() {
   examplesSelect.addEventListener('change', async () => {
     const path = examplesSelect.value;
     if (!path) return;
+    const apiKey = localStorage.getItem('claude-api-key') ?? '';
+    if (!apiKey) {
+      examplesSelect.value = '';
+      alert('Enter your Claude API key in settings before loading a bhajan.');
+      return;
+    }
     examplesSelect.value = '';
     let r;
     try {
@@ -229,7 +245,7 @@ async function handleText(text) {
     parsed = parse(text);
   } catch (err) {
     hideLoading();
-    setStatus('Parse error: ' + err.message);
+    alert('Parse error: ' + err.message);
     return;
   }
 
@@ -239,7 +255,7 @@ async function handleText(text) {
     doc = await translate(parsed, apiKey, msg => setLoadingMsg(msg), t);
   } catch (err) {
     hideLoading();
-    setStatus('Error: ' + err.message);
+    alert('Translation failed: ' + err.message);
     return;
   }
 
