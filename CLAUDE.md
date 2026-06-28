@@ -31,6 +31,19 @@ The frontend Nginx container (`frontend/Dockerfile`) proxies `/api/*` and `/tran
 to the backend container (`backend/Dockerfile`). See `frontend/nginx.conf` for proxy rules.
 `docker-compose.yml` exposes only port 80 (frontend); the backend is internal.
 
+## Deployment
+
+Two independent workflows trigger on push to `main`:
+
+| Workflow | Trigger path | What it does |
+|---|---|---|
+| `deploy-frontend.yml` | `frontend/**` | Generates `config.js` from `TAILSCALE_BACKEND_URL` secret, FTP-deploys to Hetzner |
+| `deploy-backend.yml` | `backend/**` | Builds and pushes `ghcr.io/iodine98/bhajan-reader-backend:latest` to GHCR |
+
+For local dev against a remote backend, copy `frontend/config.example.js` →
+`frontend/config.js` and fill in the Tailscale URL. Without it, API calls use
+relative paths (works with `docker compose` or `server.py` directly).
+
 ## Running tests
 
 Playwright (E2E, requires server running):
