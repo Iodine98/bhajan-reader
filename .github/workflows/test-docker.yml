@@ -59,6 +59,19 @@ jobs:
           echo "Frontend failed to start within 30 seconds"
           exit 1
 
+      - name: Wait for backend
+        run: |
+          for i in {1..30}; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:80/api/transcribe-check)
+            if [ "$code" != "502" ] && [ "$code" != "000" ]; then
+              echo "Backend ready (HTTP $code)"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Backend failed to become ready within 30 seconds"
+          exit 1
+
       - name: Run smoke tests
         run: |
           python3 << 'PYEOF'
