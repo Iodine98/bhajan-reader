@@ -32,8 +32,7 @@ to the backend container (`backend/Dockerfile`). See `frontend/nginx.conf` for p
 `docker-compose.yml` exposes only port 80 (frontend); the backend is internal.
 
 The backend image is published to GHCR (`ghcr.io/iodine98/bhajan-reader-backend:latest`)
-on every push to `main` that touches `frontend/**` via the `publish` job in
-`.github/workflows/deploy-frontend.yml`.
+on every push to `main` that touches `backend/**` via `.github/workflows/deploy-backend.yml`.
 
 ## Backend URL (Tailscale / remote)
 
