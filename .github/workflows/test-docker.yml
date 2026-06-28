@@ -61,58 +61,55 @@ jobs:
 
       - name: Run smoke tests
         run: |
-          export FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:80)
-          export BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:80/api/transcribe-check)
-          export BACKEND_BODY=$(curl -s http://localhost:80/api/transcribe-check)
-          echo "Frontend status: $FRONTEND_STATUS"
-          echo "Backend status:  $BACKEND_STATUS"
-          echo "Backend body:    $BACKEND_BODY"
-
           python3 << 'PYEOF'
-          import os, sys, xml.etree.ElementTree as ET
+          import os, sys, time, urllib.request, urllib.error, xml.etree.ElementTree as ET
 
-          frontend_status = os.environ.get('FRONTEND_STATUS', '')
-          backend_status  = os.environ.get('BACKEND_STATUS', '')
-          backend_body    = os.environ.get('BACKEND_BODY', '')
+          BASE = 'http://localhost:80'
+          suite_start = time.monotonic()
+
+          def probe(path, expect_codes, name):
+              t0 = time.monotonic()
+              try:
+                  resp = urllib.request.urlopen(BASE + path, timeout=10)
+                  code = str(resp.getcode())
+              except urllib.error.HTTPError as e:
+                  code = str(e.code)
+              except Exception as e:
+                  return name, False, str(e), round(time.monotonic() - t0, 3)
+              elapsed = round(time.monotonic() - t0, 3)
+              ok = code in expect_codes
+              msg = '' if ok else f'Expected {expect_codes}, got HTTP {code}'
+              return name, ok, msg, elapsed
 
           cases = [
-              (
-                  "Frontend serves HTML",
-                  frontend_status == '200',
-                  f"Expected HTTP 200, got {frontend_status!r}",
-              ),
-              (
-                  "Backend proxy reachable via Nginx",
-                  backend_status in ('200', '501'),
-                  f"Expected HTTP 200 or 501, got {backend_status!r} — body: {backend_body!r}",
-              ),
+              probe('/',                     ['200'],        'Frontend serves HTML'),
+              probe('/api/transcribe-check', ['200', '501'], 'Backend proxy reachable via Nginx'),
           ]
 
           failures = 0
-          suite = ET.Element(
-              'testsuite',
-              name='Docker Smoke Tests',
-              tests=str(len(cases)),
-          )
-          for name, ok, msg in cases:
-              tc = ET.SubElement(suite, 'testcase', classname='docker.smoke', name=name)
+          suite = ET.Element('testsuite', name='Docker Smoke Tests',
+                             tests=str(len(cases)),
+                             timestamp=time.strftime('%Y-%m-%dT%H:%M:%S'),
+                             time=str(round(time.monotonic() - suite_start, 3)))
+          for name, ok, msg, elapsed in cases:
+              tc = ET.SubElement(suite, 'testcase', classname='docker.smoke',
+                                 name=name, time=str(elapsed))
               if ok:
-                  print(f"  PASS  {name}")
+                  print(f'  PASS  {name}  ({elapsed}s)')
               else:
                   failures += 1
                   ET.SubElement(tc, 'failure', message=msg).text = msg
-                  print(f"  FAIL  {name}")
-                  print(f"        {msg}")
+                  print(f'  FAIL  {name}  ({elapsed}s)\n        {msg}')
 
           suite.set('failures', str(failures))
           os.makedirs('reports', exist_ok=True)
-          ET.ElementTree(suite).write('reports/smoke-junit.xml', xml_declaration=True, encoding='utf-8')
-
+          ET.ElementTree(suite).write('reports/smoke-junit.xml',
+                                      xml_declaration=True, encoding='utf-8')
           if failures:
-              print(f"\n{failures} smoke test(s) failed — see above for details")
+              print(f'\n{failures} test(s) failed')
               sys.exit(1)
           else:
-              print(f"\nAll {len(cases)} smoke tests passed")
+              print(f'\nAll {len(cases)} tests passed')
           PYEOF
 
       - name: Stop containers
@@ -145,9 +142,9 @@ jobs:
           path: reports
 
       - name: Publish test report
-        uses: dorny/test-reporter@v1
+        uses: EnricoMi/publish-unit-test-result-action@v2
         with:
-          name: Docker Smoke Tests
-          path: reports/smoke-junit.xml
-          reporter: java-junit
-          fail-on-error: false
+          files: reports/smoke-junit.xml
+          comment_mode: always
+          check_name: Docker Smoke Tests
+          fail_on: nothing
