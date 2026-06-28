@@ -19,6 +19,7 @@ const titleEl = document.getElementById('bhajan-title');
 const fileInput = document.getElementById('file-input');
 const uploadBtn = document.getElementById('upload-btn');
 const exportBtn = document.getElementById('export-btn');
+const examplesSelect = document.getElementById('examples-select');
 const langSelect = document.getElementById('lang-select');
 const themeBtn = document.getElementById('theme-btn');
 const themeIconMoon = document.getElementById('theme-icon-moon');
@@ -200,24 +201,20 @@ function setupFileUpload() {
     fileInput.value = '';
   });
   exportBtn.addEventListener('click', exportTranslation);
+
+  examplesSelect.addEventListener('change', async () => {
+    const path = examplesSelect.value;
+    if (!path) return;
+    examplesSelect.value = '';
+    settingsModal.close();
+    const r = await fetch(path);
+    if (!r.ok) { setStatus('Could not load example: ' + r.statusText); return; }
+    await handleText(await r.text());
+  });
 }
 
-/**
- * Read, parse, translate, and load a .bhajan File object.
- * Shows loading overlay and updates status bar throughout.
- * @param {File} file - File selected by the user or dropped onto the page.
- */
-async function handleFile(file) {
+async function handleText(text) {
   showLoading(t('loadingParsing'));
-  let text;
-  try {
-    text = await file.text();
-  } catch (err) {
-    hideLoading();
-    setStatus('Could not read file: ' + err.message);
-    return;
-  }
-
   let parsed;
   try {
     parsed = parse(text);
@@ -240,6 +237,17 @@ async function handleFile(file) {
   hideLoading();
   loadDocument(doc);
   broadcast.emitLoad(doc);
+}
+
+async function handleFile(file) {
+  let text;
+  try {
+    text = await file.text();
+  } catch (err) {
+    setStatus('Could not read file: ' + err.message);
+    return;
+  }
+  await handleText(text);
 }
 
 // ── Theme toggle ──────────────────────────────────────────────────────────────
