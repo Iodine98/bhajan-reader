@@ -18,6 +18,13 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
+      - name: Generate backend config
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+        run: |
+          printf "Object.defineProperty(window, 'BACKEND_URL', {\n  value: '%s',\n  writable: false,\n  configurable: false,\n});\n" \
+            "$BACKEND_URL" > frontend/config.js
+
       - name: Deploy to Hetzner via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:

@@ -19,6 +19,7 @@ const titleEl = document.getElementById('bhajan-title');
 const fileInput = document.getElementById('file-input');
 const uploadBtn = document.getElementById('upload-btn');
 const exportBtn = document.getElementById('export-btn');
+const examplesSelect = document.getElementById('examples-select');
 const langSelect = document.getElementById('lang-select');
 const themeBtn = document.getElementById('theme-btn');
 const themeIconMoon = document.getElementById('theme-icon-moon');
@@ -193,37 +194,58 @@ function exportTranslation() {
 // ── File upload ───────────────────────────────────────────────────────────────
 
 function setupFileUpload() {
-  uploadBtn.addEventListener('click', () => fileInput.click());
+  uploadBtn.addEventListener('click', () => {
+    const apiKey = localStorage.getItem('claude-api-key') ?? '';
+    if (!apiKey) {
+      alert('Enter your Claude API key in settings before loading a bhajan.');
+      return;
+    }
+    fileInput.click();
+  });
   fileInput.addEventListener('change', e => {
     const file = e.target.files[0];
-    if (file) handleFile(file);
+    if (file) {
+      settingsModal.close();
+      handleFile(file);
+    }
     fileInput.value = '';
   });
   exportBtn.addEventListener('click', exportTranslation);
+
+  examplesSelect.addEventListener('change', async () => {
+    const path = examplesSelect.value;
+    if (!path) return;
+    const apiKey = localStorage.getItem('claude-api-key') ?? '';
+    if (!apiKey) {
+      examplesSelect.value = '';
+      alert('Enter your Claude API key in settings before loading a bhajan.');
+      return;
+    }
+    examplesSelect.value = '';
+    let r;
+    try {
+      r = await fetch(path);
+    } catch (err) {
+      alert('Could not load example: ' + err.message);
+      return;
+    }
+    if (!r.ok) {
+      alert('Could not load example: ' + r.statusText);
+      return;
+    }
+    settingsModal.close();
+    await handleText(await r.text());
+  });
 }
 
-/**
- * Read, parse, translate, and load a .bhajan File object.
- * Shows loading overlay and updates status bar throughout.
- * @param {File} file - File selected by the user or dropped onto the page.
- */
-async function handleFile(file) {
+async function handleText(text) {
   showLoading(t('loadingParsing'));
-  let text;
-  try {
-    text = await file.text();
-  } catch (err) {
-    hideLoading();
-    setStatus('Could not read file: ' + err.message);
-    return;
-  }
-
   let parsed;
   try {
     parsed = parse(text);
   } catch (err) {
     hideLoading();
-    setStatus('Parse error: ' + err.message);
+    alert('Parse error: ' + err.message);
     return;
   }
 
@@ -233,13 +255,24 @@ async function handleFile(file) {
     doc = await translate(parsed, apiKey, msg => setLoadingMsg(msg), t);
   } catch (err) {
     hideLoading();
-    setStatus('Error: ' + err.message);
+    alert('Translation failed: ' + err.message);
     return;
   }
 
   hideLoading();
   loadDocument(doc);
   broadcast.emitLoad(doc);
+}
+
+async function handleFile(file) {
+  let text;
+  try {
+    text = await file.text();
+  } catch (err) {
+    setStatus('Could not read file: ' + err.message);
+    return;
+  }
+  await handleText(text);
 }
 
 // ── Theme toggle ──────────────────────────────────────────────────────────────
@@ -332,16 +365,20 @@ function setupSettings() {
 
   verifyKeyBtn.addEventListener('click', () => verifyApiKey(apiKeyInput.value.trim()));
 
-  settingsClose.addEventListener('click', () => {
-    localStorage.setItem('claude-api-key', apiKeyInput.value.trim());
+  const tryCloseSettings = () => {
+    const key = apiKeyInput.value.trim();
+    if (!key && !currentDoc) {
+      alert('A Claude API key is required to translate bhajas. Enter your key before closing settings.');
+      return;
+    }
+    localStorage.setItem('claude-api-key', key);
     settingsModal.close();
-  });
+  };
+
+  settingsClose.addEventListener('click', tryCloseSettings);
 
   settingsModal.addEventListener('click', e => {
-    if (e.target === settingsModal) {
-      localStorage.setItem('claude-api-key', apiKeyInput.value.trim());
-      settingsModal.close();
-    }
+    if (e.target === settingsModal) tryCloseSettings();
   });
 
   thresholdInput.addEventListener('input', () => {
@@ -459,7 +496,7 @@ async function toggleMic() {
         micStatus.textContent = t('listening');
       } catch (err) {
         activeRecognizer = null;
-        setStatus('Speech error: ' + err.message);
+        alert('Speech error: ' + err.message);
       }
     } else {
       try {
@@ -474,7 +511,7 @@ async function toggleMic() {
         micBtn.title = t('micOnsetOffTitle');
         micStatus.textContent = t('micOn');
       } catch (err) {
-        setStatus('Mic error: ' + err.message + '. Use keyboard instead.');
+        alert('Mic error: ' + err.message + ' Use keyboard instead.');
       }
     }
   }
@@ -554,7 +591,7 @@ async function verifyApiKey(key) {
   verifyKeyBtn.disabled = true;
 
   try {
-    const response = await fetch('/api/anthropic', {
+    const response = await fetch(`${window.BACKEND_URL || ''}/api/anthropic`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

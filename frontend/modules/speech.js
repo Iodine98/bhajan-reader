@@ -58,6 +58,8 @@ export function normalizeRom(text) {
     .replace(/[^a-z]/g, '');
 }
 
+const BASE = window.BACKEND_URL || '';
+
 export class SpeechRecognizer {
   constructor() {
     this.lang = 'hi-IN';
@@ -177,7 +179,7 @@ export class ServerSpeechRecognizer {
   /** Check that the server has speech_recognition installed. */
   static async checkServerSupport() {
     try {
-      const r = await fetch('/api/transcribe-check');
+      const r = await fetch(`${BASE}/api/transcribe-check`);
       return r.ok;
     } catch {
       return false;
@@ -190,9 +192,12 @@ export class ServerSpeechRecognizer {
    */
   async start() {
     if (this.isRunning) return;
+    if (!navigator.mediaDevices) {
+      throw new Error('Microphone requires HTTPS (or localhost). Serve the app over HTTPS to enable mic input.');
+    }
 
     // Verify server has speech_recognition before asking for mic permission
-    const r = await fetch('/api/transcribe-check');
+    const r = await fetch(`${BASE}/api/transcribe-check`);
     if (!r.ok) {
       const body = await r.json().catch(() => ({}));
       throw new Error(body.error ?? 'Server transcription unavailable. Run: pip install SpeechRecognition');
@@ -242,7 +247,7 @@ export class ServerSpeechRecognizer {
     const sampleRate = this._audioCtx?.sampleRate ?? 44100;
     const wav = _encodeWav(samples, sampleRate);
     try {
-      const r = await fetch('/api/transcribe', {
+      const r = await fetch(`${BASE}/api/transcribe`, {
         method: 'POST',
         headers: { 'Content-Type': 'audio/wav', 'X-Lang': this.lang },
         body: wav,

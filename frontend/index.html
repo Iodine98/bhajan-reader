@@ -13,17 +13,7 @@
 
   <!-- ── Header (hidden in display mode) ───────────────────────────────────── -->
   <header id="header">
-    <div class="header-left">
-      <button id="upload-btn" data-i18n-title="uploadTitle">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        <span data-i18n="upload">Upload</span>
-      </button>
-      <input type="file" id="file-input" accept=".bhajan,.txt" hidden />
-      <button id="export-btn" data-i18n-title="exportTitle" disabled>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        <span data-i18n="export">Export</span>
-      </button>
-    </div>
+    <div class="header-left"></div>
 
     <h1 id="bhajan-title">Bhajan Reader</h1>
 
@@ -114,6 +104,25 @@
       </div>
 
       <section class="setting-group">
+        <label data-i18n="loadLabel">Load Bhajan</label>
+        <div class="load-row">
+          <select id="examples-select">
+            <option value="">— examples —</option>
+            <option value="examples/gayatri-mantra.bhajan">Gayatri Mantra</option>
+            <option value="examples/om-namah-shivaya.bhajan">Om Namah Shivaya</option>
+          </select>
+          <button id="upload-btn" class="btn-secondary" data-i18n="upload">Open file…</button>
+          <input type="file" id="file-input" accept=".bhajan,.txt" hidden />
+        </div>
+      </section>
+
+      <section class="setting-group">
+        <label data-i18n="exportLabel">Export</label>
+        <button id="export-btn" class="btn-secondary" data-i18n="export" disabled>Export translation</button>
+        <p class="setting-hint" data-i18n="exportHint">Saves the current translation to a JSON file.</p>
+      </section>
+
+      <section class="setting-group">
         <label for="api-key-input" data-i18n="apiKeyLabel">Claude API Key</label>
         <div class="api-key-row">
           <input type="password" id="api-key-input" placeholder="sk-ant-…" autocomplete="off" />
@@ -181,6 +190,7 @@
     </div>
   </div>
 
+  <script src="config.js"></script>
   <script type="module" src="app.js"></script>
 </body>
 </html>

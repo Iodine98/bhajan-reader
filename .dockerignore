@@ -1,0 +1,6 @@
+backend/.venv
+backend/reports
+**/__pycache__
+**/*.pyc
+.git
+.github

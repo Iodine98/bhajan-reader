@@ -1,9 +1,6 @@
 name: Tests
 
 on:
-  push:
-    paths:
-      - 'backend/**'
   pull_request:
     paths:
       - 'backend/**'
@@ -74,11 +71,70 @@ jobs:
       - name: Run tests
         run: uv run pytest tests/ -v --junit-xml=reports/junit.xml
 
-      - name: Publish test report
-        uses: dorny/test-reporter@v1
+      - name: Generate report
         if: always()
+        run: |
+          python3 << 'PYEOF'
+          import os, xml.etree.ElementTree as ET
+          from collections import defaultdict
+
+          tree = ET.parse('reports/junit.xml')
+          root = tree.getroot()
+          if root.tag == 'testsuites':
+              cases = [tc for suite in root for tc in suite.findall('testcase')]
+          else:
+              cases = root.findall('testcase')
+
+          n_total = len(cases)
+          n_fail = sum(1 for tc in cases
+                       if tc.find('failure') is not None or tc.find('error') is not None)
+          n_pass = n_total - n_fail
+          icon = '✅' if n_fail == 0 else '❌'
+
+          body = f'## {icon} Python Tests\n\n'
+          body += '| | Count |\n|---|---|\n'
+          body += f'| Tests | {n_pass} passed, {n_fail} failed, {n_total} total |\n'
+          total_dur = sum(float(tc.get('time', 0) or 0) for tc in cases)
+          body += f'| Duration | {total_dur:.2f}s |\n'
+
+          by_file = defaultdict(list)
+          for tc in cases:
+              classname = tc.get('classname', '')
+              parts = classname.split('.')
+              if len(parts) > 1 and parts[-1] and parts[-1][0].isupper():
+                  parts = parts[:-1]
+              file_path = '/'.join(parts) + '.py'
+              by_file[file_path].append(tc)
+
+          body += '\n### Test Details\n'
+          for file_path in sorted(by_file.keys()):
+              body += f'\n#### {file_path}\n\n'
+              body += '| Test | Duration | |\n|------|----------|--|\n'
+              for tc in by_file[file_path]:
+                  name = tc.get('name', '')
+                  t = tc.get('time', '')
+                  failed = (tc.find('failure') is not None
+                            or tc.find('error') is not None)
+                  status = '❌' if failed else '✅'
+                  dur = f'{float(t):.3f}s' if t else '—'
+                  body += f'| {name} | {dur} | {status} |\n'
+
+          run_url = (
+              f"{os.environ['GITHUB_SERVER_URL']}/"
+              f"{os.environ['GITHUB_REPOSITORY']}/"
+              f"actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          )
+          body += f'\n<sub>Full run: {run_url}</sub>'
+
+          os.makedirs('reports', exist_ok=True)
+          with open('reports/pr-report.md', 'w') as f:
+              f.write(body)
+          print(body)
+          PYEOF
+
+      - name: Post report as PR comment
+        if: always()
+        uses: marocchino/sticky-pull-request-comment@v2
         with:
-          name: Pytest Results
-          path: backend/reports/junit.xml
-          reporter: java-junit
-          fail-on-error: false
+          header: python-tests-report
+          path: backend/reports/pr-report.md

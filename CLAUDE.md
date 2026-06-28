@@ -20,6 +20,17 @@ cd backend && uv run python3 server.py   # starts http://localhost:8080 with hot
 
 No build step, no npm. The frontend is vanilla JS. Edit any `.js`, `.html`, `.css`, or `.bhajan` file and the browser reloads automatically via SSE.
 
+## Running with Docker
+
+```bash
+docker compose up --build   # frontend → http://localhost, backend on internal port 8080
+docker compose down
+```
+
+The frontend Nginx container (`frontend/Dockerfile`) proxies `/api/*` and `/translations/*`
+to the backend container (`backend/Dockerfile`). See `frontend/nginx.conf` for proxy rules.
+`docker-compose.yml` exposes only port 80 (frontend); the backend is internal.
+
 ## Running tests
 
 Playwright (E2E, requires server running):
@@ -47,6 +58,7 @@ uv run pytest tests/test_theme.py::TestThemeToggle::test_click_switches_to_light
 
 | Module | Role |
 |---|---|
+| `app.js` | Entry point. `handleText(text)` is the shared loading path used by both the file-picker and the examples dropdown. |
 | `cursor.js` | Single source of truth for position. Pub/sub: register callbacks with `cursor.on(fn)`. Maintains a flat phrase list across all verses. |
 | `renderer.js` | Sanskrit panel has two sub-rows: `.sa-row` (Devanagari) and `.rom-row` (IAST). Both share `data-word-index`, so one selector highlights both simultaneously. |
 | `translator.js` | Calls Claude via the server proxy. Bump `CACHE_VERSION` constant when changing the prompt or expected JSON schema to invalidate old cached translations. |
@@ -83,3 +95,5 @@ Each line under a `[verse:N]` marker becomes one **phrase**. A phrase is the ato
 - **`CACHE_VERSION` in `translator.js`**: Must be bumped manually if the Claude prompt or JSON schema changes, to invalidate old translations stored in `sessionStorage` and `translations/`.
 - **Hot reload watches**: `.html`, `.css`, `.js`, `.bhajan` only. Changes to `.json` files in `translations/` won't trigger a browser reload.
 - **API key storage**: Stored in `localStorage` only. Never sent to or stored by `server.py`.
+- **Mic requires a secure context**: `navigator.mediaDevices` is `undefined` over plain HTTP on non-localhost. Both `audio.js` and `speech.js` guard against this and throw a human-readable error. Test mic features via `localhost` or HTTPS only.
+- **Upload/Export live in the Settings modal, not the toolbar**: The header toolbar has no file buttons. The "Load Bhajan" section (examples dropdown + "Open file…") and "Export" section are the first two groups inside `<dialog id="settings-modal">`.

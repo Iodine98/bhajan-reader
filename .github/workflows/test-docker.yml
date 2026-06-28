@@ -1,0 +1,225 @@
+name: Docker Integration Tests
+
+on:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'docker-compose.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build images
+        run: docker compose build
+
+      - name: Save images
+        run: docker save $(docker compose config --images | tr '\n' ' ') | gzip > images.tar.gz
+
+      - name: Upload images artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-images
+          path: images.tar.gz
+          retention-days: 1
+
+  smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download images artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-images
+
+      - name: Load images
+        run: docker load < images.tar.gz
+
+      - name: Start containers
+        run: docker compose up -d
+
+      - name: Wait for frontend
+        run: |
+          for i in {1..30}; do
+            if curl -s http://localhost:80 > /dev/null; then
+              echo "Frontend ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Frontend failed to start within 30 seconds"
+          exit 1
+
+      - name: Wait for backend
+        run: |
+          for i in {1..30}; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:80/api/transcribe-check)
+            if [ "$code" != "502" ] && [ "$code" != "000" ]; then
+              echo "Backend ready (HTTP $code)"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Backend failed to become ready within 30 seconds"
+          exit 1
+
+      - name: Run smoke tests
+        run: |
+          python3 << 'PYEOF'
+          import os, sys, time, urllib.request, urllib.error, xml.etree.ElementTree as ET
+
+          BASE = 'http://localhost:80'
+          suite_start = time.monotonic()
+
+          def probe(path, name, *, expect_codes=None, expect_body=None, expect_404=False):
+              t0 = time.monotonic()
+              try:
+                  resp = urllib.request.urlopen(BASE + path, timeout=10)
+                  code = str(resp.getcode())
+                  body = resp.read(512).decode('utf-8', errors='replace')
+              except urllib.error.HTTPError as e:
+                  code = str(e.code)
+                  body = ''
+              except Exception as e:
+                  return name, False, str(e), round(time.monotonic() - t0, 3)
+              elapsed = round(time.monotonic() - t0, 3)
+              if expect_404:
+                  ok = code == '404'
+                  msg = '' if ok else f'Expected 404, got HTTP {code}'
+              elif expect_codes:
+                  ok = code in expect_codes
+                  msg = '' if ok else f'Expected {expect_codes}, got HTTP {code}'
+                  if ok and expect_body and expect_body not in body:
+                      ok = False
+                      msg = f'HTTP {code} but body missing {expect_body!r}'
+              else:
+                  ok, msg = True, ''
+              return name, ok, msg, elapsed
+
+          cases = [
+              probe('/',
+                    'docker compose up — containers running',
+                    expect_codes=['200']),
+              probe('/api/transcribe-check',
+                    'curl /api/transcribe-check → ok: true',
+                    expect_codes=['200', '501'], expect_body='"ok"'),
+              probe('/examples/gayatri-mantra.bhajan',
+                    'Example files served (Gayatri Mantra)',
+                    expect_codes=['200']),
+              probe('/examples/om-namah-shivaya.bhajan',
+                    'Example files served (Om Namah Shivaya)',
+                    expect_codes=['200']),
+              probe('/translations/missing-file.json',
+                    'Translation cache 404 — clean (not 502)',
+                    expect_404=True),
+          ]
+
+          failures = 0
+          suite = ET.Element('testsuite', name='Docker Smoke Tests',
+                             tests=str(len(cases)),
+                             timestamp=time.strftime('%Y-%m-%dT%H:%M:%S'),
+                             time=str(round(time.monotonic() - suite_start, 3)))
+          for name, ok, msg, elapsed in cases:
+              tc = ET.SubElement(suite, 'testcase', classname='docker.smoke',
+                                 name=name, time=str(elapsed))
+              if ok:
+                  print(f'  PASS  {name}  ({elapsed}s)')
+              else:
+                  failures += 1
+                  ET.SubElement(tc, 'failure', message=msg).text = msg
+                  print(f'  FAIL  {name}  ({elapsed}s)\n        {msg}')
+
+          suite.set('failures', str(failures))
+          os.makedirs('reports', exist_ok=True)
+          ET.ElementTree(suite).write('reports/smoke-junit.xml',
+                                      xml_declaration=True, encoding='utf-8')
+          if failures:
+              print(f'\n{failures} test(s) failed')
+              sys.exit(1)
+          else:
+              print(f'\nAll {len(cases)} tests passed')
+          PYEOF
+
+      - name: Stop containers
+        if: always()
+        run: docker compose down
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-results
+          path: reports/smoke-junit.xml
+          retention-days: 7
+
+  report:
+    needs: [smoke]
+    runs-on: ubuntu-latest
+    if: always()
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download test results
+        uses: actions/download-artifact@v4
+        with:
+          name: smoke-results
+          path: reports
+
+      - name: Generate report
+        run: |
+          python3 << 'PYEOF'
+          import os, xml.etree.ElementTree as ET
+
+          tree = ET.parse('reports/smoke-junit.xml')
+          suite = tree.getroot()
+          cases = suite.findall('testcase')
+          n_fail = sum(1 for tc in cases if tc.find('failure') is not None)
+          n_pass = len(cases) - n_fail
+          icon = '✅' if n_fail == 0 else '❌'
+
+          body = f'## {icon} Docker Integration Tests\n\n'
+          if n_fail == 0:
+              body += f'All **{len(cases)}** checks passed.\n\n'
+          else:
+              body += f'**{n_fail}** of **{len(cases)}** checks failed.\n\n'
+
+          body += '| # | Check | Status | Duration |\n'
+          body += '|---|-------|:------:|----------|\n'
+          for i, tc in enumerate(cases, 1):
+              name = tc.get('name', '')
+              t = tc.get('time', '')
+              failed = tc.find('failure') is not None
+              status = '❌' if failed else '✅'
+              dur = f'{float(t):.3f}s' if t else '—'
+              body += f'| {i} | {name} | {status} | {dur} |\n'
+
+          run_url = (
+              f"{os.environ['GITHUB_SERVER_URL']}/"
+              f"{os.environ['GITHUB_REPOSITORY']}/"
+              f"actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          )
+          body += f'\n<sub>Full run: {run_url}</sub>'
+
+          with open('pr-report.md', 'w') as f:
+              f.write(body)
+          print(body)
+          PYEOF
+
+      - name: Post report as PR comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: docker-integration-report
+          path: pr-report.md
