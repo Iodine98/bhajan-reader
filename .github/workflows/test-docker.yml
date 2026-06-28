@@ -67,23 +67,47 @@ jobs:
           BASE = 'http://localhost:80'
           suite_start = time.monotonic()
 
-          def probe(path, expect_codes, name):
+          def probe(path, name, *, expect_codes=None, expect_body=None, expect_404=False):
               t0 = time.monotonic()
               try:
                   resp = urllib.request.urlopen(BASE + path, timeout=10)
                   code = str(resp.getcode())
+                  body = resp.read(512).decode('utf-8', errors='replace')
               except urllib.error.HTTPError as e:
                   code = str(e.code)
+                  body = ''
               except Exception as e:
                   return name, False, str(e), round(time.monotonic() - t0, 3)
               elapsed = round(time.monotonic() - t0, 3)
-              ok = code in expect_codes
-              msg = '' if ok else f'Expected {expect_codes}, got HTTP {code}'
+              if expect_404:
+                  ok = code == '404'
+                  msg = '' if ok else f'Expected 404, got HTTP {code}'
+              elif expect_codes:
+                  ok = code in expect_codes
+                  msg = '' if ok else f'Expected {expect_codes}, got HTTP {code}'
+                  if ok and expect_body and expect_body not in body:
+                      ok = False
+                      msg = f'HTTP {code} but body missing {expect_body!r}'
+              else:
+                  ok, msg = True, ''
               return name, ok, msg, elapsed
 
           cases = [
-              probe('/',                     ['200'],        'Frontend serves HTML'),
-              probe('/api/transcribe-check', ['200', '501'], 'Backend proxy reachable via Nginx'),
+              probe('/',
+                    'docker compose up — containers running',
+                    expect_codes=['200']),
+              probe('/api/transcribe-check',
+                    'curl /api/transcribe-check → ok: true',
+                    expect_codes=['200', '501'], expect_body='"ok"'),
+              probe('/examples/gayatri-mantra.bhajan',
+                    'Example files served (Gayatri Mantra)',
+                    expect_codes=['200']),
+              probe('/examples/om-namah-shivaya.bhajan',
+                    'Example files served (Om Namah Shivaya)',
+                    expect_codes=['200']),
+              probe('/translations/missing-file.json',
+                    'Translation cache 404 — clean (not 502)',
+                    expect_404=True),
           ]
 
           failures = 0
@@ -146,5 +170,5 @@ jobs:
         with:
           files: reports/smoke-junit.xml
           comment_mode: always
-          check_name: Docker Smoke Tests
+          check_name: Docker Integration Tests
           fail_on: nothing

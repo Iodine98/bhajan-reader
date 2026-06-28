@@ -72,10 +72,10 @@ jobs:
         run: uv run pytest tests/ -v --junit-xml=reports/junit.xml
 
       - name: Publish test report
-        uses: dorny/test-reporter@v1
+        uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
         with:
-          name: Pytest Results
-          path: backend/reports/junit.xml
-          reporter: java-junit
-          fail-on-error: false
+          files: backend/reports/junit.xml
+          comment_mode: always
+          check_name: Python Tests
+          fail_on: nothing
