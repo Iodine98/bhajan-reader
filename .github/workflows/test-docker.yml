@@ -1,11 +1,6 @@
 name: Docker Integration Tests
 
 on:
-  push:
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'docker-compose.yml'
   pull_request:
     paths:
       - 'backend/**'
