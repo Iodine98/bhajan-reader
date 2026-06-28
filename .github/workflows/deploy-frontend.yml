@@ -21,7 +21,7 @@ jobs:
 
       - name: Generate backend config
         env:
-          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          BACKEND_URL: ${{ secrets.TAILSCALE_BACKEND_URL }}
         run: |
           printf "Object.defineProperty(window, 'BACKEND_URL', {\n  value: '%s',\n  writable: false,\n  configurable: false,\n});\n" \
             "$BACKEND_URL" > frontend/config.js
