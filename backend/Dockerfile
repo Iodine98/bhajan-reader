@@ -4,10 +4,7 @@ WORKDIR /app
 
 RUN pip install uv
 
-COPY backend/ ./backend/
-COPY frontend/ ./frontend/
-
-WORKDIR /app/backend
+COPY . .
 
 RUN uv sync --no-dev
 
