@@ -38,7 +38,7 @@ Two independent workflows trigger on push to `main`:
 | Workflow | Trigger path | What it does |
 |---|---|---|
 | `deploy-frontend.yml` | `frontend/**` | Generates `config.js` from `TAILSCALE_BACKEND_URL` secret, FTP-deploys to Hetzner |
-| `deploy-backend.yml` | `backend/**` | Builds and pushes `ghcr.io/iodine98/bhajan-reader-backend:latest` to GHCR |
+| `deploy-backend.yml` | `backend/**` (also runnable manually via `workflow_dispatch`) | Builds and pushes `ghcr.io/iodine98/bhajan-reader-backend:latest` to GHCR |
 
 For local dev against a remote backend, copy `frontend/config.example.js` →
 `frontend/config.js` and fill in the Tailscale URL. Without it, API calls use
@@ -46,12 +46,14 @@ relative paths (works with `docker compose` or `server.py` directly).
 
 ## Running tests
 
-Playwright (E2E, requires server running):
+Playwright (E2E, requires server running). `uv sync` already installs `playwright`
+and `pytest` (dev dependency group); only the browser binary needs a separate install:
 
 ```bash
 cd backend
-uv run pip install playwright pytest && playwright install chromium
-uv run pytest tests/test_theme.py -v          # all theme tests
+uv run playwright install chromium
+uv run python3 server.py &                    # tests expect a live server on :8080
+uv run pytest tests/ -v                       # full suite: cursor, i18n, parser, renderer, server, settings, speech, theme
 uv run pytest tests/test_theme.py::TestThemeToggle::test_click_switches_to_light  # single test
 ```
 
@@ -73,11 +75,15 @@ uv run pytest tests/test_theme.py::TestThemeToggle::test_click_switches_to_light
 |---|---|
 | `app.js` | Entry point. `handleText(text)` is the shared loading path used by both the file-picker and the examples dropdown. |
 | `cursor.js` | Single source of truth for position. Pub/sub: register callbacks with `cursor.on(fn)`. Maintains a flat phrase list across all verses. |
+| `parser.js` | Parses raw `.bhajan` text (meta header + `[verse:N]` sections) into `{ meta, verses[{ id, lines[] }] }`. |
 | `renderer.js` | Sanskrit panel has two sub-rows: `.sa-row` (Devanagari) and `.rom-row` (IAST). Both share `data-word-index`, so one selector highlights both simultaneously. |
 | `translator.js` | Calls Claude via the server proxy. Bump `CACHE_VERSION` constant when changing the prompt or expected JSON schema to invalidate old cached translations. |
 | `audio.js` | RMS onset detection. Configurable `threshold` (ratio over background) and `refractoryMs` (min gap between onsets). |
+| `speech.js` | Speech recognition: Web Speech API (Chrome) or server-side `/api/transcribe` fallback (Firefox). Transliterates Devanagari recognizer output to Latin for Levenshtein-matching against reference words. |
+| `keyboard.js` | Maps keydown events to cursor actions (Space/→ advance word, ← retreat word, ↓/Enter advance phrase, ↑/Backspace retreat phrase); ignores keys while focus is in a form field. |
+| `i18n.js` | UI string translations (`STRINGS` table, keyed by language code). Add a top-level key to support a new UI language. |
 | `broadcast.js` | Only the operator window emits; `?mode=display` windows are read-only listeners. |
-| `server.py` | Serves static files + proxies `POST /api/anthropic` → Anthropic API + handles `POST /translations/{hash}.json` + `POST /api/transcribe` for server-side speech recognition (Firefox fallback, requires `SpeechRecognition`). |
+| `server.py` | Serves static files + proxies `POST /api/anthropic` → Anthropic API + handles `POST /translations/{hash}.json` + `GET /api/transcribe-check` (probes `SpeechRecognition` availability) + `POST /api/transcribe` for server-side speech recognition (Firefox fallback, requires `SpeechRecognition`). |
 
 ### Translation caching (three tiers)
 
