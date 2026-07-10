@@ -137,10 +137,28 @@ class HotReloadHandler(http.server.BaseHTTPRequestHandler):
         else:
             self.send_error(404)
 
+    def do_OPTIONS(self):
+        # CORS preflight for the API routes the frontend may call cross-origin
+        # (e.g. when frontend/config.js points at a remote Tailscale backend).
+        if (self.path in ('/api/anthropic', '/api/transcribe')
+                or self.path.startswith('/translations/')):
+            self.send_response(204)
+            self._send_cors_headers()
+            self.send_header('Content-Length', '0')
+            self.end_headers()
+        else:
+            self.send_error(404)
+
+    def _send_cors_headers(self):
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, x-api-key, anthropic-version, X-Lang')
+
     def _json_response(self, status: int, payload: dict):
         body = json.dumps(payload).encode()
         self.send_response(status)
         self.send_header('Content-Type', 'application/json')
+        self._send_cors_headers()
         self.send_header('Content-Length', str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -211,6 +229,7 @@ class HotReloadHandler(http.server.BaseHTTPRequestHandler):
             return
 
         self.send_response(201)
+        self._send_cors_headers()
         self.send_header('Content-Length', '0')
         self.end_headers()
 
@@ -241,7 +260,7 @@ class HotReloadHandler(http.server.BaseHTTPRequestHandler):
                 resp_body = resp.read()
                 self.send_response(resp.status)
                 self.send_header('Content-Type', resp.headers.get('Content-Type', 'application/json'))
-                self.send_header('Access-Control-Allow-Origin', '*')
+                self._send_cors_headers()
                 self.send_header('Content-Length', str(len(resp_body)))
                 self.end_headers()
                 self.wfile.write(resp_body)
@@ -249,7 +268,7 @@ class HotReloadHandler(http.server.BaseHTTPRequestHandler):
             resp_body = e.read()
             self.send_response(e.code)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self._send_cors_headers()
             self.send_header('Content-Length', str(len(resp_body)))
             self.end_headers()
             self.wfile.write(resp_body)
