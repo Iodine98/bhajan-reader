@@ -37,7 +37,7 @@ jobs:
         run: |
           cat > frontend/.env <<EOF
           GATEWAY_URL=${{ secrets.TAILSCALE_BACKEND_URL }}
-          GATEWAY_ORIGIN=${{ vars.GATEWAY_ORIGIN }}
+          GATEWAY_ORIGIN=${{ secrets.GATEWAY_ORIGIN }}
           GATEWAY_API_KEY=${{ secrets.GATEWAY_API_KEY }}
           EOF
 
