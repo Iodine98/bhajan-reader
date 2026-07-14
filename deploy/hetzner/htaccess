@@ -1,0 +1,19 @@
+# Deployed as .htaccess at the site root by .github/workflows/deploy-frontend.yml
+# (kept extension-less here so it isn't hidden/mishandled by tooling in this
+# repo folder, renamed at deploy time instead).
+#
+# 1. Route /api/<path> and /translations/<path> to the PHP relay
+#    (api-proxy.php), which holds this deployment's gateway URL + shared
+#    secret server-side (see api-proxy.php's doc comment, and backend-gateway
+#    issue #11). QSA appends the browser's real query string onto the
+#    injected __path param, which carries the FULL original path (api-proxy.php
+#    reconstructs "/api/..." or "/translations/..." from it directly).
+RewriteEngine On
+RewriteRule ^(api|translations)/(.*)$ api-proxy.php?__path=$1/$2 [QSA,L]
+
+# 2. Deny HTTP access to the generated .env (GATEWAY_URL/GATEWAY_ORIGIN/
+#    GATEWAY_API_KEY) -- api-proxy.php still reads it by filesystem path;
+#    this only blocks a direct web request for it. Apache 2.4 syntax.
+<Files ".env">
+    Require all denied
+</Files>
