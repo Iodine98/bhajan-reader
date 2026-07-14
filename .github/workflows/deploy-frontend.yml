@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - 'frontend/**'
+      - 'deploy/hetzner/**'
+      - '.github/workflows/deploy-frontend.yml'
 
 permissions:
   contents: read
@@ -18,12 +20,26 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Generate backend config
-        env:
-          BACKEND_URL: ${{ secrets.TAILSCALE_BACKEND_URL }}
+      - name: Add PHP relay
+        # No frontend/config.js is generated anymore -- window.BACKEND_URL
+        # stays unset, so translator.js/speech.js/app.js's
+        # `window.BACKEND_URL || ''` fallback already sends every API call
+        # to this app's own origin (relative paths). .htaccess below routes
+        # those same-origin requests to the relay, which holds the real
+        # gateway URL + shared X-Api-Key secret server-side instead (see
+        # deploy/hetzner/api-proxy.php's doc comment, and backend-gateway
+        # issue #11 / Iodine98/backend-gateway#27's enforcement of that key).
         run: |
-          printf "Object.defineProperty(window, 'BACKEND_URL', {\n  value: '%s',\n  writable: false,\n  configurable: false,\n});\n" \
-            "$BACKEND_URL" > frontend/config.js
+          cp deploy/hetzner/api-proxy.php frontend/api-proxy.php
+          cp deploy/hetzner/htaccess frontend/.htaccess
+
+      - name: Generate .env for the relay
+        run: |
+          cat > frontend/.env <<EOF
+          GATEWAY_URL=${{ secrets.TAILSCALE_BACKEND_URL }}
+          GATEWAY_ORIGIN=${{ vars.GATEWAY_ORIGIN }}
+          GATEWAY_API_KEY=${{ secrets.GATEWAY_API_KEY }}
+          EOF
 
       - name: Deploy to Hetzner via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4

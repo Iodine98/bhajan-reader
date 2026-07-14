@@ -241,10 +241,23 @@ class HotReloadHandler(http.server.BaseHTTPRequestHandler):
         length = int(self.headers.get('Content-Length', 0))
         body = self.rfile.read(length)
 
-        # Forward only the headers the Anthropic API needs
+        # Forward only the headers the Anthropic API needs.
+        #
+        # The user's own Anthropic key normally arrives as `x-api-key` (sent
+        # directly by the frontend — see translator.js/app.js). In production
+        # behind backend-gateway (issue #11 hardening), requests instead go
+        # through deploy/hetzner/api-proxy.php, which must ALSO attach a
+        # gateway-wide shared secret under that same canonical header name
+        # (`X-Api-Key` — HTTP headers are case-insensitive, so it collides
+        # with the user's key). The relay avoids that collision by resending
+        # the user's key as `X-Anthropic-Api-Key` instead; prefer that header
+        # when present and fall back to `x-api-key` for local/direct dev
+        # (docker compose, `server.py` directly) where there's no gateway
+        # hop and no collision.
+        anthropic_key = self.headers.get('X-Anthropic-Api-Key') or self.headers.get('x-api-key', '')
         forward_headers = {
             'Content-Type':      self.headers.get('Content-Type', 'application/json'),
-            'x-api-key':         self.headers.get('x-api-key', ''),
+            'x-api-key':         anthropic_key,
             'anthropic-version': self.headers.get('anthropic-version', '2023-06-01'),
         }
 

@@ -34,3 +34,7 @@ desktop.ini
 
 # Generated at deploy time from BACKEND_URL secret — never commit
 frontend/config.js
+
+# Generated at deploy time (issue #11 hardening relay) — the real gateway
+# URL + shared X-Api-Key secret; never commit. See deploy/hetzner/.
+frontend/.env
