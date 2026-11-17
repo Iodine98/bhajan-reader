@@ -165,3 +165,7 @@ This repo is one piece of a small set of coupled repos, most of which are privat
 
 Do not name the private repos, image paths, hostnames, or issue numbers of that private infrastructure in
 this file — describe behavior in the abstract terms above instead.
+
+## Review policy
+
+Before starting any issue, read [`AGENT_REVIEW_POLICY.md`](./AGENT_REVIEW_POLICY.md). It defines which changes an LLM may review and merge, and which need a human.
